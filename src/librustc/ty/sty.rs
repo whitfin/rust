@@ -121,7 +121,7 @@ pub enum TypeVariants<'tcx> {
 
     /// A reference; a pointer with an associated lifetime. Written as
     /// `&'a mut T` or `&'a T`.
-    TyRef(Region<'tcx>, TypeAndMut<'tcx>),
+    TyRef(Region<'tcx>, Ty<'tcx>, hir::Mutability),
 
     /// The anonymous type of a function declaration/definition. Each
     /// function has a unique type.
@@ -1397,7 +1397,7 @@ impl<'a, 'gcx, 'tcx> TyS<'tcx> {
 
     pub fn is_slice(&self) -> bool {
         match self.sty {
-            TyRawPtr(mt) | TyRef(_, mt) => match mt.ty.sty {
+            TyRawPtr(TypeAndMut { ty, .. }) | TyRef(_, ty, _) => match ty.sty {
                 TySlice(_) | TyStr => true,
                 _ => false,
             },
@@ -1446,11 +1446,8 @@ impl<'a, 'gcx, 'tcx> TyS<'tcx> {
 
     pub fn is_mutable_pointer(&self) -> bool {
         match self.sty {
-            TyRawPtr(tnm) | TyRef(_, tnm) => if let hir::Mutability::MutMutable = tnm.mutbl {
-                true
-            } else {
-                false
-            },
+            TyRawPtr(TypeAndMut { mutbl: hir::Mutability::MutMutable, .. }) |
+            TyRef(_, _, hir::Mutability::MutMutable) => true,
             _ => false
         }
     }
@@ -1603,7 +1600,7 @@ impl<'a, 'gcx, 'tcx> TyS<'tcx> {
                     mutbl: hir::MutImmutable,
                 })
             },
-            TyRef(_, mt) => Some(mt),
+            TyRef(_, ty, mutbl) => Some(TypeAndMut { ty, mutbl }),
             TyRawPtr(mt) if explicit => Some(mt),
             _ => None,
         }
@@ -1657,7 +1654,7 @@ impl<'a, 'gcx, 'tcx> TyS<'tcx> {
     /// ignores late-bound regions binders.
     pub fn regions(&self) -> Vec<ty::Region<'tcx>> {
         match self.sty {
-            TyRef(region, _) => {
+            TyRef(region, _, _) => {
                 vec![region]
             }
             TyDynamic(ref obj, region) => {
